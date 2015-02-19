@@ -1,0 +1,130 @@
+textreader bulk2db -
+textreader.py - line:163 - ERROR:
+ERROR:  missing data for column "unknown_46"
+CONTEXT:  COPY _lu_alfred_final_clean, line 73462: "73462	047 / 38694 / 73462	5047		1301012001001011122100331200212331113	51615	148487	1C	38694 Stream1C..."
+
+
+textreader bulk2db -
+textreader.py - line:166 - ERROR:
+ERROR:  missing data for column "unknown_46"
+CONTEXT:  COPY _lu_alfred_final_clean, line 73462: "73462	047 / 38694 / 73462	5047		1301012001001011122100331200212331113	51615	148487	1C	38694 Stream1C..."
+
+
+textreader bulk2db -
+textreader.py - line:170 - ERROR:
+ERROR:  missing data for column "unknown_46"
+CONTEXT:  COPY _lu_alfred_final_clean, line 73462: "73462	047 / 38694 / 73462	5047		1301012001001011122100331200212331113	51615	148487	1C	38694 Stream1C..."
+
+
+textreader bulk2db -
+textreader.py - line:170 - ERROR:
+ERROR:  missing data for column "unknown_46"
+CONTEXT:  COPY _lu_alfred_final_clean, line 73462: "73462	047 / 38694 / 73462	5047		1301012001001011122100331200212331113	51615	148487	1C	38694 Stream1C..."
+
+
+textreader bulk2db -
+textreader.py - line:170 - ERROR:
+ERROR:  invalid input syntax for integer: ""
+
+
+textreader bulk2db -
+textreader.py - line:170 - ERROR:
+ERROR:  invalid input syntax for integer: ""
+
+
+textreader bulk2db -
+textreader.py - line:170 - ERROR:
+ERROR:  invalid input syntax for integer: ""
+
+
+textreader bulk2db -
+textreader.py - line:170 - ERROR:
+ERROR:  invalid input syntax for integer: ""
+
+
+textreader bulk2db -
+textreader.py - line:176 - ERROR:
+ERROR:  invalid input syntax for integer: " "
+
+
+textreader bulk2db -
+textreader.py - line:176 - ERROR:
+ERROR:  invalid input syntax for integer: " "
+
+
+textreader bulk2db -
+textreader.py - line:176 - ERROR:
+ERROR:  invalid input syntax for integer: " "
+
+
+textreader bulk2db -
+textreader.py - line:176 - ERROR:
+ERROR:  extra data after last expected column
+CONTEXT:  COPY _lu_welcome, line 1: "1	N:\\jno39226\\originalDocs\\AUSSUPER_Emp_Welcome_Letter_AMENDED_220514.txt	no index	5243735	AUSSUP..."
+
+
+textreader bulk2db -
+textreader.py - line:176 - ERROR:
+ERROR:  extra data after last expected column
+CONTEXT:  COPY _lu_welcome, line 1: "1	N:\\jno39226\\originalDocs\\AUSSUPER_Emp_Welcome_Letter_AMENDED_220514.txt	no index	5243735	AUSSUP..."
+
+
+textreader bulk2db -
+textreader.py - line:176 - ERROR:
+ERROR:  extra data after last expected column
+CONTEXT:  COPY _lu_welcome, line 1: "1	N:\\jno39226\\originalDocs\\AUSSUPER_Emp_Welcome_Letter_AMENDED_220514.txt	no index	5243735	AUSSUP..."
+
+
+textreader bulk2db -
+textreader.py - line:178 - ERROR:
+ERROR:  extra data after last expected column
+CONTEXT:  COPY _lu_welcome, line 1: "1	N:\\jno39226\\originalDocs\\AUSSUPER_Emp_Welcome_Letter_AMENDED_220514.txt	no index	5243735	AUSSUP..."
+
+
+excelreader bulk2db -
+excelreader.py - line:175 - ERROR:
+ERROR:  missing data for column "state"
+CONTEXT:  COPY _lu_openuni, line 160: "160	N:\\jno39184\\originalDocs\\Winter Guide Mailing List.xlsx	0	Mr Frank Ainsworth		314/100 Janefie..."
+
+
+excelreader bulk2db -
+excelreader.py - line:175 - ERROR:
+ERROR:  missing data for column "state"
+CONTEXT:  COPY _lu_openuni, line 160: "160	N:\\jno39184\\originalDocs\\Winter Guide Mailing List.xlsx	0	Mr Frank Ainsworth		314/100 Janefie..."
+
+
+excelreader bulk2db -
+excelreader.py - line:175 - ERROR:
+ERROR:  missing data for column "state"
+CONTEXT:  COPY _lu_openuni, line 160: "160	N:\\jno39184\\originalDocs\\Winter Guide Mailing List.xlsx	0	Mr Frank Ainsworth		314/100 Janefie..."
+
+
+textreader bulk2db -
+textreader.py - line:177 - ERROR:
+ERROR:  extra data after last expected column
+CONTEXT:  COPY _lu_nissan_dealer, line 1: "1	N:\\jno39235\\workingData\\DealerList.txt	no index	2075	Leo Franco Nissan	Cnr Yambil & Ulong Stree..."
+
+
+excelreader bulk2db -
+excelreader.py - line:179 - ERROR:
+ERROR:  invalid input syntax for integer: ""
+
+
+textreader bulk2db -
+textreader.py - line:184 - ERROR:
+ERROR:  extra data after last expected column
+CONTEXT:  COPY _lu_dedupe, line 7948: "7948	N:\\jno39316\\workingData\\DNU\\merge.txt	no index	7948	HIRE GENIE WINTER 2014.xlsx	3	2609	0002..."
+
+
+textreader bulk2db -
+textreader.py - line:184 - ERROR:
+ERROR:  extra data after last expected column
+CONTEXT:  COPY _lu_dedupe, line 7948: "7948	N:\\jno39316\\workingData\\DNU\\merge.txt	no index	7948	HIRE GENIE WINTER 2014.xlsx	3	2609	0002..."
+
+
+textreader bulk2db -
+textreader.py - line:184 - ERROR:
+ERROR:  extra data after last expected column
+CONTEXT:  COPY _lu_dedupe, line 1: "1	N:\\jno39316\\workingData\\DNU\\merge.txt	no index	7948	HIRE GENIE WINTER 2014.xlsx	3	2609	0002190..."
+
+

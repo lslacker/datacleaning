@@ -1,0 +1,32 @@
+fieldnames = '{0}, {1}, {2}, {3}, {4}'.format(addresses, suburb, state, postcode, country)
+        temp_table = '{0}_t'.format(src_table)
+
+        cur.execute("DROP TABLE IF EXISTS {1}; SELECT {0} INTO {1} FROM {2}".format(fieldnames, temp_table, src_table))
+
+        cur.execute("""
+        ALTER TABLE {0}
+        ADD mm_preclean text default '',
+        ADD mm_note text default '',
+        ADD mm_clean_type text default '',
+        ADD mm_table_type text default 'NEW'
+        """.format(temp_table))
+
+
+        cur.execute("""
+        UPDATE {0}
+        SET mm_table_type = 'OLD'
+        ;
+        UPDATE {0} a
+        set mm_preclean = 'GOODSSP'
+        FROM pcdb b
+        WHERE trim(upper(a.{1})) = trim(upper(b.locality))
+        and trim(upper(a.{2})) = trim(upper(b.state))
+        and trim(upper(a.{3})) = trim(upper(b.pcode))
+        ;
+        UPDATE {0} a
+        set mm_preclean = 'GOODSP', {2} = b.state
+        FROM pcdb b
+        WHERE trim(upper(a.{1})) = trim(upper(b.locality))
+        and trim(upper(a.{3})) = trim(upper(b.pcode))
+        and a.mm_preclean = ''
+        """.format(temp_table, suburb, state, postcode))

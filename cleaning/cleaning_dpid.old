@@ -1,0 +1,770 @@
+#!/usr/bin/env python
+from __future__ import division
+import re
+from luan import addressparser
+import difflib
+import sys
+#sys.path.append(r'Z:\melmailing\_lib')
+sys.path.append(r'D:\0_works\pyhon_projects\_lib')
+import dtconfig
+
+RAW_WHITE_SPACE='`~!@#$%^&*{}()_<>?,./ \'"'
+
+def is_full_address(address_info, tn1, thn, tht):
+    result = False
+    
+    try:
+        address_info.upper().index(tn1.upper())
+        address_info.upper().index(thn.upper())
+        address_info.upper().index(tht.upper())
+        
+        result = True
+    except ValueError:
+        pass
+    return result
+
+def is_not_suburb(suburb):
+    result = False
+    if suburb.upper().startswith('OPPOSITE') or suburb.upper().startswith('OPP') or suburb.upper().startswith('CNR') or suburb.upper().startswith('CORNER'):
+       result = True
+    return result
+
+class CleanDPID:
+    '''
+        Address Cleaning
+    '''
+    def __init__(self, src_table, addresses, suburb, state, postcode, country):        
+        self.src_table = src_table
+        self.clean_table = self.src_table + '_dpid'
+        self.addresses = addresses
+        self.address_list = addresses.split(',')
+        self.address_list = map(lambda x: x.strip(), self.address_list)
+        self.suburb = suburb
+        self.state = state
+        self.postcode = postcode
+        self.country = country
+        self.note= []
+        
+    def clean(self):
+        
+        #create clean_table from src
+        self.create_cleaned_table()
+        self.step1()
+        self.step1_plus()
+        self.step2()
+        self.step3()
+        self.step4()
+        self.step5_pre()
+        self.step5_pre_2()
+        self.step5()
+        self.step6()
+        #how to check suburb in address
+        #check 2 addresses
+        #if suburb contain street information
+    
+    def step6(self):
+        address_update_str = ''
+        for each_address in self.address_list:
+            address_update_str += each_address +"= '' and "
+            
+        address_update_str = address_update_str[:-4]
+        results = dtconfig.DB.query("""
+            select *
+            from %s
+            where %s
+        """ % (self.clean_table, address_update_str))
+        #results = list(results)
+        for result in results:
+            mm_key = result['mm_key']
+            myvars = dict(mm_key = mm_key)
+            print dtconfig.DB.delete(self.clean_table, where = 'mm_key = $mm_key', vars = myvars)
+            
+            query = ("""
+                insert into %s
+                select * from %s
+                where mm_key = %d;
+                
+                update %s
+                set mm_note = mm_note || '|check'
+                where mm_key = %d
+            """ % (self.clean_table, self.src_table, mm_key, self.clean_table, mm_key))
+            print dtconfig.DB.query(query)
+            
+    def step5(self):
+        #copy self.address_list
+        copy_address_list = self.address_list[:]
+        processed_address_list = []
+        there_are_more = True
+        while there_are_more:
+            try:
+                each_address = copy_address_list.pop()
+            except IndexError:
+                there_are_more = False
+            else:
+                query = """
+                    select *
+                    from %s
+                    where %s <> '' """ % (self.clean_table, each_address)
+                    
+                #9717,19321
+                if len(processed_address_list) > 0:
+                    temp_list = map(lambda x: x+"=''", processed_address_list)
+                    query = query + " and " + " and ".join(temp_list)
+                
+                results = dtconfig.DB.query(query)
+                
+                for result in results:
+                    suburb = result['loc']
+                    state = result['stt']
+                    postcode = result['pcd']
+                    street_type = result['tht']
+                    street_name = result['thn']
+                    address = result[each_address]
+                    pdt = result['pdt']
+                    new_address = address
+                    
+                    #print self.get_matching_blocks(new_address.upper(), suburb.upper())
+                    (new_address, mm_note) = self.check_ssp_in_address(new_address, postcode,street_name,street_type,pdt,False)
+                    (new_address, mm_note) = self.check_ssp_in_address(new_address, state,street_name,street_type,pdt,False)
+                    (new_address, mm_note) = self.check_ssp_in_address(new_address, suburb,street_name,street_type,pdt)
+                    
+                    #print 'result=',new_address
+                    if mm_note != '':
+                        #update
+                        updateQuery = """
+                            update %s
+                            set %s = '%s', mm_note = mm_note || '|%s'
+                            where mm_key = %d
+                        """ % (self.clean_table, each_address, new_address.replace("'","''").replace("\\","\\\\"), mm_note, result.mm_key)
+                        dtconfig.DB.query(updateQuery)
+                    
+                processed_address_list.append(each_address)
+    
+    def get_matching_blocks(self, address, suburb, offset=0):
+        #print '*'*40
+        #print '%s<->%s' % (address,suburb)
+        
+        s = difflib.SequenceMatcher(None, address.upper(), suburb.upper())
+        matching_blocks =  s.get_matching_blocks()
+        matching_blocks.pop()
+        print '<<<<',matching_blocks
+        final_address = list(address)
+        final_suburb = list(suburb)
+        temp_str = ''
+        suburb_str=''
+        if not matching_blocks:
+            return []
+            
+        for each_matching_block in matching_blocks:
+            #print each_matching_block
+            a,b,size =  each_matching_block
+            #print range(a,a+size)
+            for i in range(a,a+size):
+                if final_address[i] != ' ':
+                    final_address[i] = '*'
+            for i in range(b,b+size):
+                if final_suburb[i] != ' ':
+                    final_suburb[i] = '*'        
+            temp_str=''.join(final_address)
+            suburb_str = ''.join(final_suburb)                    
+        address_array =  temp_str.split(r' ')
+        suburb_array = suburb_str.split(r' ')
+        print 'address_arr=',address_array
+        print 'suburb_str=',suburb_str
+        print 'suburb_arr=',suburb_array
+        address_list = address.split(r' ')
+        #print address_array
+        i = 0
+        no_more_loop = False
+        final_matching_blocks = []
+        while len(address_array) >= 1 and not no_more_loop:
+            
+            an_element = address_array.pop(0)
+            suburb_element = suburb_array.pop(0)
+            print "you are checking =", an_element
+            fix_size = int(len(an_element)/2)
+            if len(an_element) <= 3:
+                fix_size = len(an_element)
+            fix_size_suburb = int(len(suburb_element)/2)
+            if len(suburb_element) <= 3:
+                fix_size_suburb = len(suburb_element)
+            address_list.pop(0)
+            count= an_element.count('*')
+            suburb_count = suburb_element.count('*')
+            bal_str = ' '.join(address_list)
+            offset_count = len(address) - len(bal_str)
+            print 'address=',an_element
+            print 'address_count=',count
+            print 'address_fixsize=',fix_size   
+            print 'suburb_count=',suburb_count
+            print 'fixsizesuburb=',fix_size_suburb
+            if count >= 0 and count <= fix_size :
+                #print 'doing again'
+                #print bal_str
+                #print offset_count
+                #print '*'*40
+                print 'im here'
+                print ' '.join(address_list)
+                
+                if count == suburb_count and suburb_count >= fix_size_suburb:
+                    matching_blocks.extend(self.get_matching_blocks(' '.join(address_list), suburb, offset_count))
+                else:
+                    matching_blocks = self.get_matching_blocks(' '.join(address_list), suburb, offset_count)
+            else:
+                if count == len(suburb):
+                    print 'luan=im here'
+                    matching_blocks.extend(self.get_matching_blocks(' '.join(address_list), suburb, offset_count))
+                    print 'im back'
+                    print matching_blocks
+                else:
+                    print 'you dont need to loop'
+            no_more_loop = True
+            i += 1
+        
+        
+        
+        
+        for a_match in matching_blocks:
+            print 'luan=',a_match   
+            (a,b,size) = a_match
+            a = a + offset
+            final_matching_blocks.append(difflib.Match(a,b,size))
+        print '>>>>>',final_matching_blocks
+        return final_matching_blocks
+                
+    def check_ssp_in_address(self, address, suburb, street_name, street_type, pdt, isSuburb=True):
+        
+        print '*'*40
+        print '*your doing matching now'
+        print '*'*40
+        #s = difflib.SequenceMatcher(None, address.upper(), suburb.upper())
+        
+        print "%s <-> %s" % (address,suburb)
+        #matching_blocks =  s.get_matching_blocks()
+        matching_blocks = self.get_matching_blocks(address.upper(), suburb.upper())
+        
+        print matching_blocks
+        fix_size = int(len(suburb)/2)
+        
+        #print fix_size
+        if len(suburb)<=5:
+            fix_size = len(suburb)
+        if suburb == 'GOLD COAST MC':
+            fix_size=4 
+        address_start_from = int(len(address)/2)
+        if len(address)<=5:
+            address_start_from = 1
+        address_start_from = len(street_name)+len(street_type)+3
+            
+        final_address = list(address)
+        final_suburb = list(suburb)
+        #filter_matching_blocks = self.filter_matching_blocks(matching_blocks, fix_size,len(address))
+        filter_matching_blocks = matching_blocks[:]
+        print 'filter=',filter_matching_blocks
+        mm_note = ''
+        if filter_matching_blocks:
+            print "%s <-> %s" % (address,suburb)
+            print filter_matching_blocks
+            
+            for each_matching_block in filter_matching_blocks:
+                a,b,size =  each_matching_block
+                #print range(a,a+size)
+                
+                for i in range(a,a+size):
+                    final_address[i] = '*'
+                for i in range(b,b+size):
+                    final_suburb[i] = '*'
+                print '---->'+''.join(final_address)+'<'
+                print '---->'+''.join(final_suburb)+'<'
+            
+            final_address = ''.join(final_address)
+            final_suburb = ''.join(final_suburb)
+            count_star = final_suburb.count('*')
+            test_me = (int)(len(suburb)/2)
+            if len(suburb)<=4:
+                test_me = len(suburb)
+            match_rate = False
+            if ((    re.match(r'^[*](.+)$', final_suburb, re.I) 
+                  or re.match(r'^\b(MT|MOUNT|ST|EAST|SOUTH|NORTH|WEST|UPPER)\b [*](.+)$', final_suburb, re.I)
+                  or re.match(r'[a-z0][*]+$',final_suburb, re.I)
+                )
+                and count_star >= test_me):
+                match_rate = True
+            print '----->Match-rate=',match_rate
+            if match_rate == False:
+                return (address, '')
+            #print 'check='+final_address+'<'
+            #double check on blocking
+            num_spaces = suburb.count(' ')
+            #if num_spaces > 0:
+            #    m1_pattern = r'^([0a-z]*[* ]+)$'
+            #else:
+            m1_pattern = r'^([0a-z]?[* ]+)$'
+                
+            if re.match(m1_pattern, final_address,re.I):
+                #print '******MATCH1******'
+                final_address = ''
+                mm_note = 'SU_In_ADR_M1'
+            elif re.match(r'^\s*(MT|UPPER|EAST|SOUTH|NORTH|WEST|N|W|E|S|NTH|STH)([.,]*\s*|[.,]*\s+)([*]+\s*)$', final_address, re.I):
+                #print '******MATCH2******'
+                final_address = ''
+                mm_note = 'SU_In_ADR_M2'
+            elif re.match(r'^\s*(MT|UPPER|EAST|SOUTH|NORTH|WEST|N|W|E|S|NTH|STH)([.,]*\s*|[.,]*\s+)([*]+[A-Z\- ][* ]*[.,]*)$', final_address, re.I):
+                #print '******MATCH2******'
+                final_address = ''
+                mm_note = 'SU_In_ADR_M2_2'
+            elif re.match(r'^(.{%d,})[.,]*\s+\b(MT|UPPER|EAST|SOUTH|NORTH|WEST|N|W|E|S|NTH|STH)\b[.,]*\s+([*]+\s*)$' % (len(street_name)+len(street_type)+3), final_address, re.I):
+                #print '******MATCH2******'
+                #final_address = re.match(r'^(.+\s+%s.+)[.,]*\s+\b(UPPER|EAST|SOUTH|NORTH|WEST|N|W|E|S|NTH|STH)\b[.,]*\s+([*]+\s*)$' % street_type[0], final_address, re.I).group(1)
+                mm_note = 'SU_In_ADR_M2_1'
+                match_pos_from=re.match(r'^(.{%d,})[.,]*\s+\b(MT|UPPER|EAST|SOUTH|NORTH|WEST|N|W|E|S|NTH|STH)\b[.,]*\s+([*]+\s*)$' % (len(street_name)+len(street_type)+3), final_address, re.I).start(2)
+                if match_pos_from > 0 and address[match_pos_from-1] != ' ':
+                    #match middle
+                    #then wrong
+                    final_address = address
+                    #mm_note = mm_note+'_WRONG'
+                    mm_note = ''
+                else:
+                    final_address = re.match(r'^(.{%d,})[.,]*\s+\b(UPPER|EAST|SOUTH|NORTH|WEST|N|W|E|S|NTH|STH)\b[.,]*\s+([*]+\s*)$' % (len(street_name)+len(street_type)+3), final_address, re.I).group(1)
+                    final_address = final_address.strip()
+                    
+                    if re.match(r'^[0-9/ ]+$',final_address):
+                        final_address = address
+                        if not (' ' + street_type) in final_address:
+                            final_address += ' ' + street_type
+                        mm_note = mm_note+'_strType'
+                    
+                    #recover star address
+                    if re.search(r'[*]+',final_address,re.I):
+                        temp_list = list(final_address)
+                        temp_address_list = list(address)
+                        for i, achar in enumerate(temp_list):
+                            if achar == '*':
+                                temp_list[i] = temp_address_list[i]
+                        final_address = ''.join(temp_list)
+                    
+                    if isSuburb:
+                        if street_name != '' and (final_address.upper().endswith(street_name) or final_address.upper().endswith(street_name+' ')):      
+                            
+                            final_address =  address
+                            #mm_note = mm_note+'_WRONG' 
+                            mm_note = ''
+                        #not complete address
+                        if street_name != '' and (not street_name in final_address.upper() and not street_name+' ' in final_address.upper()):  
+                            complete_address = True
+                            break_down_street_name = street_name.split(r'\s+')
+                            print break_down_street_name
+                            for a_street_element in break_down_street_name:
+                                if not a_street_element in final_address:
+                                    complete_address = False
+                            
+                            if not complete_address:
+                                final_address =  address
+                                #mm_note = mm_note+'_WRONG' 
+                                mm_note = ''
+                    
+                print final_address
+                print mm_note
+            elif re.match(r'^([*]+) (UPPER|EAST|SOUTH|NORTH|WEST|N|W|E|S|NTH|STH|GC|G[. ]C|B[. ]C)[.]*$', final_address, re.I):
+                #print '******MATCH3******'
+                final_address = ''
+                mm_note = 'SU_In_ADR_M3'
+            elif re.match(r'^(.+?)([*]+) \b(UPPER|EAST|SOUTH|NORTH|WEST|N|W|E|S|NTH|STH|GC|G[. ]C|B[. ]C)\b[.]*$', final_address, re.I):
+                print '******MATCH3******'
+                final_address = re.match(r'^(.+?)([*]+) \b(UPPER|EAST|SOUTH|NORTH|WEST|N|W|E|S|NTH|STH|GC|G[. ]C|B[. ]C)\b[.]*$', final_address, re.I).group(1)
+                mm_note = 'SU_In_ADR_M3_1'   
+                if re.search(r'^[0-9 /-]+',final_address, re.I):
+                    final_address =  address
+                    #mm_note = mm_note+'_WRONG' 
+                    mm_note = ''
+                    
+                print final_address
+                 
+            elif re.match(r'^([*]+AIL [*]ENTRE)$', final_address, re.I):
+                #print '******MATCH4******'
+                final_address = ''
+                mm_note = 'SU_In_ADR_M4'
+            elif re.match(r'^[*]+[A-Z\-.]{1,2}[*]+[.,]*$', final_address, re.I):
+                #print '******MATCH5******'
+                final_address = ''
+                mm_note = 'SU_In_ADR_M5_1'
+            elif re.match(r'^[*]+[A-Z\-.][*]+[A-Z\-.][*]*[.,]*$', final_address, re.I):
+                #print '******MATCH5******'
+                final_address = ''
+                mm_note = 'SU_In_ADR_M5_1plus'
+            elif re.match(r'^[*]+[A-Z\-.][*]*$', final_address, re.I):
+                #print '******MATCH5******'
+                final_address = ''
+                mm_note = 'SU_In_ADR_M5_2'
+            elif re.match(r'^(.{%d,}?)[.,]*\s+[*]+[A-Z\- ]{,2}[*]*$'%int(address_start_from), final_address, re.I):
+                print '******MATCH5_3******'
+                match_pos_from=re.match(r'^(.{%d,}?)[.,]*\s+([*]+[A-Z\- ]{,2}[*]*)$'%int(address_start_from), final_address, re.I).start(2)
+                
+                
+                if match_pos_from > 0 and address[match_pos_from-1] != ' ':
+                    #match middle
+                    #then wrong
+                    final_address = address
+                    #mm_note = 'SU_In_ADR_M3_WRONG'
+                    mm_note = ''
+                else:
+                    final_address = re.match(r'^(.{%d,}?)[.,]*\s+[*]+[A-Z\- ]{,2}[*]*$'%int(address_start_from), final_address, re.I).group(1)
+                    final_address = final_address.strip()
+                    mm_note = 'SU_In_ADR_M5_3'
+                    if re.match(r'^[0-9/ ]+$',final_address):
+                        final_address = address
+                        if not (' ' + street_type) in final_address:
+                            final_address += ' ' + street_type
+                        mm_note = mm_note+'_strType'
+                    print '-----------im here'+final_address
+                    #recover star address
+                    if re.search(r'[*]+',final_address,re.I):
+                        temp_list = list(final_address)
+                        temp_address_list = list(address)
+                        for i, achar in enumerate(temp_list):
+                            if achar == '*':
+                                temp_list[i] = temp_address_list[i]
+                        final_address = ''.join(temp_list)
+                    print '-----------im here'+final_address
+                    if isSuburb:
+                        if street_name != '' and (final_address.upper().endswith(street_name) or final_address.upper().endswith(street_name+' ')):      
+                            
+                            final_address =  address
+                            #mm_note = mm_note+'_WRONG' 
+                            mm_note = ''
+                        #not complete address
+                        if street_name != '' and (not street_name in final_address.upper() and not street_name+' ' in final_address.upper()):  
+                            complete_address = True
+                            break_down_street_name = street_name.split(r'\s+')
+                            print break_down_street_name
+                            for a_street_element in break_down_street_name:
+                                if not a_street_element in final_address:
+                                    complete_address = False
+                            
+                            if not complete_address:
+                                final_address =  address
+                                #mm_note = mm_note+'_WRONG' 
+                                mm_note = ''
+                
+                print final_address
+                print mm_note
+            elif re.match(r'^[*]{3,}[ .,]+(VIA .+)$', final_address, re.I):
+                print '******MATCH6******'
+                temp_obj = re.match(r'^[*]{3,}[ .,]+(VIA .+)$', final_address, re.I)
+                final_address = temp_obj.group(1)
+                mm_note = 'SU_In_ADR_M6'
+                #recover star address
+                
+                temp_idx = temp_obj.start(1)
+                print 'check='+final_address
+                recover_word = ''
+                for i, a_char in enumerate(final_address):
+                    if a_char == '*':
+                        recover_word += address[temp_idx+i]
+                    else:
+                        recover_word += a_char
+                final_address = recover_word
+                
+                
+            elif re.match(r'^([^*]+?)[.,"]*\s*([*]+[A-Z\- ][* ]*[.,]*)$', final_address, re.I):
+                print '******MATCH7******'
+                
+                match_pos_from=re.match(r'^([^*]+?)[.,"]*\s*([*]+[A-Z\- ][* ]*[.,]*)$', final_address, re.I).start(2)
+                print match_pos_from
+                print '>'+address[match_pos_from-1]+'<'
+                if match_pos_from > 0 and (not re.match('^[" ]$',address[match_pos_from-1],re.I) and not re.search(r'^[0-9]$',address[match_pos_from-1],re.I)):
+                    #match middle
+                    #then wrong
+                    
+                    final_address = address
+                    #mm_note = 'SU_In_ADR_M7_WRONG'
+                    mm_note = ''
+                else:
+                    final_address = re.match(r'^([^*]+?)[.,"]*\s*([*]+[A-Z\- ][* ]*[.,]*)$' , final_address, re.I).group(1).strip()
+                    
+                    mm_note = 'SU_In_ADR_M7'
+                    if re.match(r'^[1-9]+[0-9/ ]*$',final_address):
+                        
+                        final_address = address
+                        if not re.search(' ' + street_type, final_address, re.I):
+                            final_address += ' ' + street_type
+                        mm_note = 'SU_In_ADR_M7_strType'
+                    
+                    #recover star address
+                    if re.search(r'[*]+',final_address,re.I):
+                        
+                        temp_list = list(final_address)
+                        temp_address_list = list(address)
+                        for i, achar in enumerate(temp_list):
+                            if achar == '*':
+                                temp_list[i] = temp_address_list[i]
+                        final_address = ''.join(temp_list)
+                    
+                    if isSuburb:
+                        if street_name != '' and (final_address.upper().endswith(street_name) or final_address.upper().endswith(street_name+' ')):      
+                            final_address =  address
+                            #mm_note = 'SU_In_ADR_M7_WRONG'    
+                            mm_note = ''
+                        
+                        #not complete address
+                        if street_name != '' and (not street_name in final_address.upper() and not street_name+' ' in final_address.upper()):  
+                            complete_address = True
+                            break_down_street_name = street_name.split(r'\s+')
+                            for a_street_element in break_down_street_name:
+                                if not a_street_element in final_address:
+                                    complete_address = False
+                            
+                            if not complete_address:
+                                final_address =  address
+                                #mm_note = 'SU_In_ADR_M7_WRONG' 
+                                mm_note = ''
+                     
+                print final_address
+                print mm_note
+                    #double check addresses
+                
+            elif re.match(r'^(?<![0-9])\s*[*]{3,}[.,]*\s+(?![0-9])(.+)$', final_address, re.I):
+                #if re.match(r'^(.+)\s*[*]{3,} (?!ALLEY|ALY|ALLY|ARCADE|ARC|AVENUE|AVE|BOULEVARD|BLVD|BVD|ROAD|RD|STREET|ST|STR|DRIVE|DR|DRV|CLOSE|CL|LANE|LN|MANOR|MNR|MEWS|PLACE|PL|ROW|TERRACE|TER|TCE|TRACE|TRCE|TRAIL|TRL|COURT|CT|CIRCUS|CIR|CIRCLE|CIRC|CRESCENT|CRES|CRESC|LOOP|OVAL|QUADRANT|SQUARE|SQ|GROVE|GRV|PARKWAY|PKWY|RISE|ESPLANADE|ESP|PARADE|PDE|PROMENADE|PROM|WALK|HIGHWAY|HWY|BRIDGE|COLLEGE)[.,]*\s*(.*)$', final_address, re.I):
+                temp_match_obj = re.match(r'^(?<![0-9])\s*[*]{3,}[.,]*\s+(?![0-9])(.+)$', final_address, re.I)
+                could_be_another_suburb = temp_match_obj.group(1)
+                temp_idx = temp_match_obj.start(1)
+                print 'check='+could_be_another_suburb
+                recover_word = ''
+                for i, a_char in enumerate(could_be_another_suburb):
+                    if a_char == '*':
+                        recover_word += address[temp_idx+i]
+                    else:
+                        recover_word += a_char
+                could_be_another_suburb = recover_word
+                if not re.search(r'\b(HOUSE|CARAVAN|ALLEY|ALY|ALLY|ARCADE|ARC|AVENUE|AVE|BOULEVARD|BLVD|BVD|ROAD|RD|STREET|ST|STR|DRIVE|DR|DRV|CLOSE|CL|LANE|LN|MANOR|MNR|MEWS|PLACE|PL|ROW|TERRACE|TER|TCE|TRACE|TRCE|TRAIL|TRL|COURT|CT|CIRCUS|CIR|CIRCLE|CIRC|CRESCENT|CRES|CRESC|LOOP|OVAL|QUADRANT|SQUARE|SQ|GROVE|GRV|PARKWAY|PKWY|RISE|ESPLANADE|ESP|PARADE|PDE|PROMENADE|PROM|WALK|HIGHWAY|HWY|BRIDGE|COLLEGE|PARK|RETREAT)\b',could_be_another_suburb,re.I):
+                    print '******MATCH8******'
+                    final_address = final_address.replace(temp_match_obj.group(),'')
+                    mm_note = 'SU_In_ADR_M8'
+            elif re.match(r'^(.+?)[., ]*[*]+$', final_address, re.I) and pdt != '':
+                print '******MATCH9******'
+                final_address = re.match(r'^(.+?)[., ]*[*]+$', final_address, re.I).group(1)
+                mm_note = 'SU_In_ADR_M9'
+            else:
+                #print '******UNMATCH******'
+                final_address = address
+            
+            
+            #if match_at_start == True and match_at_end == True:
+            
+            
+        if type(final_address) == type([]):
+            #return (''.join(final_address),'_NOTMATCH')
+            return (''.join(final_address),'')
+        else:
+            if re.search(r'[*]+',final_address,re.I):
+                temp_list = list(final_address)
+                #mm_note = mm_note+"_WRONG"
+                mm_note = ''
+                return (address, mm_note)
+            else:
+                return (final_address,mm_note)
+        
+    def step5_pre_2(self):
+       
+        query = r"""
+            update %s
+            set %s = '',mm_note = mm_note || '|Str=Locality'
+            from pcdb
+            where regexp_replace(pcdb.locality,'\\W+','','g')= upper(regexp_replace(%s.%s,'\\W+','','g')) and %s <> ''%s and upper(stt) = upper(pcdb.state)
+                  and regexp_replace(pcdb.locality,'\\W+','','g') <> upper(regexp_replace(thn||' '||tht,'\\W+','','g'))
+        """
+        reversed_address_list = list(reversed(self.address_list))
+        for i,each_address in enumerate(reversed_address_list):
+            if i <= 0:
+                dtconfig.DB.query(query % (self.clean_table, each_address, self.clean_table, each_address,each_address,''))
+            else:
+                dtconfig.DB.query(query % (self.clean_table, each_address, self.clean_table, each_address, each_address," and %s = '' " % reversed_address_list[i-1]))
+                          
+    def step5_pre(self):
+       
+        query = r"""
+            update %s
+            set %s = %s || ' '||%s, %s = ''
+            where %s ~* '^(ALLEY|ALY|ALLY|ARCADE|ARC|AVENUE|AVE|BOULEVARD|BLVD|BVD|ROAD|RD|STREET|ST|STR|DRIVE|DR|DRV|CLOSE|CL|LANE|LN|MANOR|MNR|MEWS|PLACE|PL|ROW|TERRACE|TER|TCE|TRACE|TRCE|TRAIL|TRL|COURT|CT|CIRCUS|CIR|CIRCLE|CIRC|CRESCENT|CRES|CRESC|LOOP|OVAL|QUADRANT|SQUARE|SQ|GROVE|GRV|PARKWAY|PKWY|RISE|ESPLANADE|ESP|PARADE|PDE|PROMENADE|PROM|WALK|HIGHWAY|HWY|WAY|RETREAT)$'
+        """
+        reversed_address_list = list(reversed(self.address_list))
+        #first_address_line = reversed_address_list.pop()
+        
+        for i in range(len(reversed_address_list)-1):
+            try:
+                sibling_address_line = reversed_address_list[i+1]
+            except AttributeError:
+                #last
+                pass
+            else:
+                temp_query = query % (self.clean_table, sibling_address_line, sibling_address_line, reversed_address_list[i], reversed_address_list[i], reversed_address_list[i])
+                dtconfig.DB.query(temp_query)
+        
+        
+    def step4(self):
+        query_list = []
+        query_list.append(r"""
+            update %s
+            set mm_note = mm_note||'|'||'ADDR=SuStP',%s = ''
+            where regexp_replace(upper(%s),$$$$[%s]*$$$$, '','g') = regexp_replace(upper(loc||' '||stt||' '||pcd),$$$$[%s]*$$$$, '','g') and %s <> '';
+        """)
+        
+        query_list.append(r"""
+            update %s
+            set mm_note = mm_note||'|'||'ADDR=SuP',%s = ''
+            where regexp_replace(upper(%s),$$$$[%s]*$$$$, '','g') = regexp_replace(upper(loc||' '||pcd),$$$$[%s]*$$$$, '','g') and %s <> '';
+        """)
+        
+        query_list.append(r"""
+            update %s
+            set mm_note = mm_note||'|'||'ADDR=SuSt',%s = ''
+            where regexp_replace(upper(%s),$$$$[%s]*$$$$, '','g') = regexp_replace(upper(loc||' '||stt),$$$$[%s]*$$$$, '','g') and %s <> '';
+        """)
+        
+        query_list.append(r"""  
+            update %s
+            set mm_note = mm_note||'|'||'ADDR=StP',%s = ''
+            where regexp_replace(upper(%s),$$$$[%s]*$$$$, '','g') = regexp_replace(upper(stt||' '||pcd),$$$$[%s]*$$$$, '','g') and %s <> '';
+        """)
+        
+        query_list.append(r"""  
+            update %s
+            set mm_note = mm_note||'|'||'ADDR=P',%s = ''
+            where regexp_replace(upper(%s),$$$$[%s]*$$$$, '','g') = regexp_replace(upper(pcd),$$$$[%s]*$$$$, '','g') and %s <> '';
+        """)
+        
+        query_list.append(r"""  
+            update %s
+            set mm_note = mm_note||'|'||'ADDR=St',%s = ''
+            where regexp_replace(upper(%s),$$$$[%s]*$$$$, '','g') = regexp_replace(upper(stt),$$$$[%s]*$$$$, '','g') and %s <> '';
+        """)
+        
+        query_list.append(r"""  
+            update %s
+            set mm_note = mm_note||'|'||'ADDR=Su',%s = ''
+            where regexp_replace(upper(%s),$$$$[%s]*$$$$, '','g') = regexp_replace(upper(loc),$$$$[%s]*$$$$, '','g') and %s <> '';
+        """)
+        
+        for each_address_line in reversed(self.address_list):
+            for each_query in query_list:
+                dtconfig.DB.query(each_query % (self.clean_table, each_address_line, each_address_line, RAW_WHITE_SPACE, RAW_WHITE_SPACE, each_address_line))
+        
+        
+    def step3(self):
+        update_query = """
+            update %s
+            set mm_note = 'UPDATE_SSP',%s = loc, %s = stt, %s = pcd
+            where mm_note = ''
+        """ % (self.clean_table, self.suburb, self.state, self.postcode)
+        
+        dtconfig.DB.query(update_query)
+                
+    def step1(self):
+        select_query = r"""
+        select *
+        from %s
+        where mm_note =''
+        and %s ~* '(.+)\\m(ALLEY|ALY|ALLY|ARCADE|ARC|AVENUE|AVE|BOULEVARD|BLVD|BVD|ROAD|RD|STREET|ST|STR|DRIVE|DR|DRV|CLOSE|CL|LANE|LN|MANOR|MNR|MEWS|PLACE|PL|ROW|TERRACE|TER|TCE|TRACE|TRCE|TRAIL|TRL|COURT|CT|CIRCUS|CIR|CIRCLE|CIRC|CRESCENT|CRES|CRESC|LOOP|OVAL|QUADRANT|SQUARE|SQ|GROVE|GRV|PARKWAY|PKWY|RISE|ESPLANADE|ESP|PARADE|PDE|PROMENADE|PROM|WALK|HIGHWAY|HWY|CRT|RETREAT)\\M'
+        """ % (self.clean_table, self.suburb)
+        
+        results = dtconfig.DB.query(select_query)
+        for result in results:
+            address_info = ''
+            for each_address in self.address_list:
+                address_info = address_info + result[each_address] + ' '
+            
+            address_info = address_info.strip()
+            mm_key = result.mm_key
+            
+            if not is_full_address(address_info, result.tn1, result.thn, result.tht) or is_not_suburb(result[self.suburb]):
+                #move suburb to neareast street
+                update_query = """
+                    update %s
+                    set %s = %s||' '||%s, mm_note='LOC2STR', %s= loc, %s= stt, %s=pcd
+                    where mm_key = %d
+                """ % (self.clean_table, self.address_list[-1], self.address_list[-1], self.suburb, self.suburb, self.state, self.postcode, mm_key)
+                dtconfig.DB.query(update_query)
+    
+    def step1_plus(self):
+        update_query = r"""
+        update %s
+        set %s = trim(regexp_replace(%s,'^(P*.*\\s*box\\s*\\d+)[.,]*(.*)$','\\2','gi'))
+           ,%s = trim(%s || ' ' ||regexp_replace(%s,'^(P*.*\\s*box\\s*\\d+)[.,]*(.*)$','\\1','gi'))
+           ,mm_note=mm_note||'|LOC2STR_BOX'
+        where %s ~* '^(P*.*\\s*box\\s*\\d+)[.,]*(.*)$'
+        """ % (self.clean_table, self.suburb, self.suburb, self.address_list[-1], self.address_list[-1], self.suburb, self.suburb)
+        
+        dtconfig.DB.query(update_query)
+        
+        update_query = r"""
+        update %s
+        set %s = trim(regexp_replace(%s,'^(POB\\s*\\d+)[.,]*(.*)$','\\2','gi'))
+           ,%s = trim(%s || ' ' ||regexp_replace(%s,'^(POB\\s*\\d+)[.,]*(.*)$','\\1','gi'))
+           ,mm_note=mm_note||'|LOC2STR_BOX'
+        where %s ~* '^(POB\\s*\\d+)[.,]*(.*)$'
+        """ % (self.clean_table, self.suburb, self.suburb, self.address_list[-1], self.address_list[-1], self.suburb, self.suburb)
+        
+        dtconfig.DB.query(update_query)
+        
+                
+    def step2(self):
+        update_query = """
+            update %s
+            set mm_note = mm_note||'|GOODSSP'
+            from pcdb
+            where upper(%s) = pcdb.locality and upper(%s.%s) = pcdb.state and upper(%s) = pcdb.pcode
+        """ % (self.clean_table, self.suburb, self.clean_table, self.state, self.postcode)
+        
+        dtconfig.DB.query(update_query)
+        
+        update_query = """
+            update %s
+            set mm_note = mm_note||'|UPDATE_LOC_PCD', %s = cpc, %s = clc
+            where mm_note !~* 'GOODSSP'
+        """ % (self.clean_table, self.postcode, self.suburb)
+        
+        dtconfig.DB.query(update_query)
+        
+        update_query = """
+            update %s
+            set mm_note = mm_note||'|UPDATE_STT', %s = pcdb.state
+            from pcdb
+            where upper(%s) = pcdb.locality and upper(%s) = pcdb.pcode
+        """ % (self.clean_table, self.state, self.suburb, self.postcode)
+        
+        dtconfig.DB.query(update_query)
+        
+        #update_query = """
+        #update %s
+        #set mm_note = mm_note = mm_note||'UPDATE_LOC',%s = clc
+        #where (mm_note !~* 'UPDATE' and mm_note !~* 'GOODSSP') and upper(%s) = stt and upper(%s) = cpc 
+        #and %s !~* ' (ALLEY|ALY|ALLY|ARCADE|ARC|AVENUE|AVE|BOULEVARD|BLVD|BVD|ROAD|RD|STREET|ST|STR|DRIVE|DR|DRV|CLOSE|CL|LANE|LN|MANOR|MNR|MEWS|PLACE|PL|ROW|TERRACE|TER|TCE|TRACE|TRCE|TRAIL|TRL|COURT|CT|CIRCUS|CIR|CIRCLE|CIRC|CIRCUIT|CRESCENT|CRES|CRESC|LOOP|OVAL|QUADRANT|SQUARE|SQ|GROVE|GRV|PARKWAY|PKWY|RISE|ESPLANADE|ESP|PARADE|PDE|PROMENADE|PROM|WALK|HIGHWAY|HWY)$'
+        #""" % (self.clean_table, self.suburb, self.state, self.postcode, self.suburb)
+        
+        #dtconfig.DB.query(update_query)
+        
+    def create_cleaned_table(self):
+        create_query = """
+            DROP TABLE IF EXISTS %s;
+            
+            select *
+            into %s
+            from %s 
+            where dpi <> '0';
+            
+            CREATE INDEX %s_idx1 on %s(mm_key);
+            
+        """ % (self.clean_table, self.clean_table, self.src_table, self.clean_table, self.clean_table)
+        
+        dtconfig.DB.query(create_query)
+        
+if __name__ == '__main__':
+
+    #app = CleanDPID('lu_snowgum_preclean_parsed',"address_line_1","address_line_2","address_line_3","postcode","country")
+    #app = CleanDPID('lu_saddle_preclean_parsed',"address,address2","city","state","postcode","country")
+    #app = CleanDPID('lu_blue_preclean_parsed',"address_1,address_2","address_3","address_4","postcode","country")
+    app = CleanDPID('lu_openuni_preclean_parsed',"address1","suburb_","state_","postcode_","country")
+    app.clean()
+    
+    
+    

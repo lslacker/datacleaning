@@ -1,0 +1,231 @@
+# def validate_suburb_state(f):
+#     """
+#     Validate suburb, state, and postcode against auspost, big chance it is a good record
+#     """
+#     def wrapped_f(*args):
+#
+#         addresses, suburb, state, postcode, country, mm_preclean, mm_note, mm_clean_type = f(*args)
+#
+#         if mm_preclean != 'SSP':
+#             a = {
+#                 'suburb': suburb,
+#                 'state': state,
+#             }
+#
+#             results = list(tb.find(a))
+#             list_of_postcode = helper.mongo_to_list(results, 'postcode')
+#             if len(list_of_postcode) > 0:
+#                 if len(list_of_postcode) == 1:
+#                     postcode = list_of_postcode[0]
+#                     mm_note += '<UPDATE_POSTCODE_1>'
+#                 else:
+#                     if mm_clean_type == '<DPID>':
+#                         postcode = _parser.getMeThis('PCD')
+#                         mm_note += '<UPDATE_POSTCODE_2>'
+#                     else:
+#                         log.info('<{3}><{0}><{1}><{2}>'.format(suburb, state, postcode, '-'.join(addresses)))
+#
+#                         for _postcode in list_of_postcode:
+#                             address = '{0} {1} {2} {3} {4}'.format(' '.join(addresses), suburb, state, _postcode, country)
+#
+#                             if is_address_good(address):
+#                                 log.info(_parser.getMeThis('PCD'))
+#                                 break
+#
+#         return addresses, suburb, state, postcode, country, mm_preclean, mm_note, mm_clean_type
+#
+#     return wrapped_f
+
+# def check_ssp(field_type):
+#     def wrap(f):
+#         def wrapped_f(*args):
+#             addresses, suburb, state, postcode, country, mm_preclean, mm_note = args
+#             if not is_state_in_pcdb(state):
+#                 log.info("<{0}> is good".format(state))
+#             if not is_suburb_in_pcdb(suburb):
+#                 log.info("<{0}> is good".format(suburb))
+#             if not is_postcode_in_pcdb(postcode):
+#                 log.info("<{0}> is good".format(postcode))
+#             # _suburb, _state, _postcode = helper.split_suburb_state_postcode(locals()[field_type])
+#             # is_modified = False
+#             # log.info('OLD: <{0}><{1}><{2}>'.format(suburb, state, postcode))
+#             # if _state and _state != state:
+#             #     state = _state
+#             #     is_modified = True
+#             # if _postcode and _postcode != postcode:
+#             #     postcode = _postcode
+#             #     is_modified = True
+#             # if _suburb and suburb != _suburb:
+#             #     suburb = _suburb
+#             #     is_modified = True
+#             # if is_modified:
+#             #     log.info('NEW: <{0}><{1}><{2}>'.format(suburb, state, postcode))
+#             return f(addresses, suburb, state, postcode, country)
+#         return wrapped_f
+#     return wrap
+
+def fill_state(addresses, suburb, state, postcode):
+    """
+    Update suburb if state and postcode are matched against auspost db
+    """
+
+    _lookup.parse(inStr=['PCD'],
+           outStr=['STT', 'LOC'],
+           address=postcode)
+
+    stt_result_1 = set(_lookup.getMeThis('STT')[1])
+    loc_result_1 = set(_lookup.getMeThis('LOC')[1])
+
+    _lookup.parse(inStr=['LOC'],
+           outStr=['STT'],
+           address=suburb)
+
+    stt_result_2 = set(_lookup.getMeThis('STT')[1])
+
+    u = set.intersection(stt_result_1, stt_result_2)
+
+    if len(u) == 0:
+        #log.info('EMPTY')
+        #log.info(stt_result_1)
+        if len(stt_result_1) == 1:
+            # high chance this is correct as this is based on postcode, however suburb is unmatched, possibly
+            #    suburb (spelling mistake, contain street, contain state, or contain via, mt lower)
+            #       -> get a list of suburb, compare then update
+
+            #postcode error
+
+            _new_suburb, _new_state, _new_postcode = (helper.split_suburb_state_postcode(suburb))
+            if _new_state or _new_postcode:
+                log.info('<{0}><{1}><{2}>'.format(suburb, state, postcode))
+                log.info('<{0}><{1}><{2}>'.format(_new_suburb, _new_state, _new_postcode))
+            # try:
+            #     _suburb, _rate = process.extractOne(suburb, loc_result_1)
+            #
+            #     #log.info(choices)
+            # except TypeError:
+            #     choices = [('0', 0)]
+            #     _suburb = ''
+            #     _rate = 0
+            #
+            # if _rate >= 75:
+            #     log.info(_suburb)
+            #     #log.info(stt_result_2)
+            #     log.info('<{0}><{1}><{2}>'.format(suburb, state, postcode))
+
+    elif len(u) == 1:
+        state = u.pop()
+    else:
+        # hardly happen
+        log.info('LARGER THAN 2')
+        log.info(stt_result_1)
+        log.info(stt_result_2)
+        log.info('<{0}><{1}><{2}>'.format(suburb, state, postcode))
+
+    return 'fill_state-', addresses, suburb, state, postcode
+
+
+def fill_suburb(addresses, suburb, state, postcode):
+    """
+    Update suburb if state and postcode are matched against auspost db
+    """
+    helper.m_lookup.parse(inStr=['STT', 'PCD'],
+           outStr=['LOC', 'STT'],
+           address=state+'|'+postcode)
+
+    loc_result = helper.m_lookup.getMeThis('LOC')
+
+    stt_result = set(helper.m_lookup.getMeThis('STT')[1])
+
+    if len(stt_result) > 1:
+        # take street name into account
+        log.info(stt_result)
+        log.info('<{0}><{1}><{2}>'.format(suburb, state, postcode))
+    if loc_result[0] > 0:
+        try:
+            _suburb, _rate = process.extractOne(suburb, loc_result[1])
+            choices = process.extract(suburb, loc_result[1], limit=2)
+            #log.info(choices)
+        except TypeError:
+            choices = [('0', 0)]
+            _suburb = ''
+            _rate = 0
+
+        _rate_100 = [x for x in choices if x[1] == 100]
+        #if _rate_100:
+            # need to update state
+            #log.info(_rate_100)
+            #log.info('<{0}><{1}><{2}>'.format(suburb, state, postcode))
+
+        # _rate_90 = [x for x in choices if x[1] >= 90]
+        # if _rate_90:
+        #     # if suburb and retrieved suburbs are almost the same,
+        #     # we dont need to update... just leave it
+        #     if len(_rate_90) > 1:
+        #         log.info(_rate_90)
+        #         log.info(suburb)
+        #     return 'SP_0'
+
+        # elif _rate >= 75:  # I think 75 is safe, it would fix a lot of spelling mistakes
+        #     log.info(result[1])
+        #     log.info(_rate)
+        #     log.info(suburb)
+        #     choices = process.extract(suburb, result[1], limit=2)
+        #     log.info(choices)
+        #     return 'SP_1', _suburb
+
+        # what is current value of suburb??? what it represent for
+        # if it is blank, then ... => try to find suburb in address
+
+        # if it is not blank, then ...
+        #      => if it is real suburb from australia post, then wrong postcode perhaps
+        #      => if not, check for suburb state postcode
+
+        # if match rate is absolutely low, it shoud be either wrong suburb,
+        # or suburb in address, or ....overseas???
+        # or it could be wrong postcode???
+        # need to take into account address
+        # for idx, address in enumerate(addresses):
+        #     if address:
+        #         try:
+        #             _suburb, _rate = process.extractOne(address, result[1])
+        #         except TypeError:
+        #             _rate = 0
+        #         finally:
+        #             log.info("Next Match: %d" % _rate)
+        #             log.info(result[-1])
+        #             log.info('OLD ' + address)
+        #             log.info('NEW ' + _suburb)
+        #             if _rate > 85:
+        #                 if not suburb.startswith('VIA'):
+        #                     suburb = address
+        #                     addresses[idx] = ''
+        #                     return 'SP_2', suburb
+        #                 else:
+        #                     return 'SP_3'
+        #             elif _rate > 70:
+        #                 # it is part of address????????
+        #                 pass
+    return ''
+
+else:
+                    _resultset = r_lookup.similar_run(parsed_result['THN'])
+                    resultset = helper.parlinkr_resultset(_resultset)
+                    resultset = [x for x in resultset if x[1].upper() == parsed_result['THT'].upper()
+                                                      and x[-1][0] == postcode[0]]  # make sure road type and postcode
+                    # suburb is not blank, need to compare to make sure than have to have someting in common ==> little rather than wrong
+                    for each_result in resultset:
+                        _resultset = r_lookup.run(each_result[-1], parsed_result['THN']+parsed_result['THT'], parsed_result['TN1'])
+                        resultset1 = helper.parlinkr_resultset(_resultset)
+                        if resultset1:
+                            result = resultset1[0]
+                            # ['', '', '', '', '183', '', '', '', '', '', '', '', '', '', '', 'Freestone', 'Rd', '', '', 'SLADEVALE', 'QLD', '4370']
+                            mm_note += '<paflinkr: {0} is updated to {1}>'.format(state, result[-2])
+                            mm_note += '<paflinkr: {0} is updated to {1}>'.format(suburb, result[-3])
+                            mm_note += '<paflinkr: {0} is updated to {1}>'.format(postcode, result[-1])
+                            postcode = result[-1]  #postcode
+                            state = result[-2]  #state
+                            suburb = result[-3]  #suburb
+                            # is it safe to update
+                            if len(resultset) > 1:
+                                log.info("paflinkr more than 1 results")
+                            break

@@ -1,0 +1,21 @@
+db get_connection -
+db.py - line:15 - ERROR:
+I am unable to connect to the database
+
+db get_connection -
+db.py - line:15 - ERROR:
+I am unable to connect to the database
+
+mongotute get_connection -
+mongotute.py - line:21 - ERROR:
+Could not connect to MongoDB: [Errno 10061] No connection could be made because the target machine actively refused it
+
+excelreader bulk2db -
+excelreader.py - line:183 - ERROR:
+ERROR:  invalid input syntax for integer: ""
+
+
+base_connection _create_and_connect_to_socket -
+base_connection.py - line:171 - ERROR:
+Connection to 127.0.0.1:5672 failed: timeout
+

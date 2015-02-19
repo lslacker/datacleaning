@@ -1,0 +1,7 @@
+__author__ = 'luan'
+
+from tasks import add
+
+result = add.delay(4, 4)
+
+print result.ready()

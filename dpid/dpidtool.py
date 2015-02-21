@@ -6,6 +6,8 @@ import cStringIO
 import utils
 import datetime
 import subprocess
+import re
+import codecs
 
 try:
     import logger
@@ -26,12 +28,16 @@ Postcode=%s
 Customer Info=
 
 [Output Fields]
-Dt Address Line=
+Dt Address Line=Corrected Add
 Dt Locality=
 Dt State=
 Dt Postcode=
-Dt Sort Plan No=
+Dt Match Type=Error
+Dt Sort Plan No=BSP Key
+Dt PPSP=PrintPost
 Dt Barcode=Barcode
+Dt DPID=DPID
+Dt PP Sort Ind=Metro Or Country
 
 [Options]
 Barcode Size=
@@ -75,13 +81,25 @@ class DPID(object):
         log.info(blink_template)
 
     def generate_text_file(self, src_table, filename, cur):
-        texter = export2db.textwriter.TextWriter(filename)
+        #texter = export2db.textwriter.TextWriter(filename)
         params = """WITH DELIMITER AS '\t' NULL AS '' CSV HEADER"""
         select_query = "SELECT * FROM {0}".format(src_table)
         output = cStringIO.StringIO()
         cur.copy_expert("COPY ({0}) TO STDOUT {1}".format(select_query, params), output)
-        texter.write(output)
-        texter.save()
+        #cur.copy_to(output, src_table, sep='\t', null='\\N', columns=None)
+        #texter.write(output)
+        #texter.save()
+        output.seek(0)
+        with open(filename, 'w') as f:
+        #with codecs.open(filename, mode="w", encoding="utf-8") as f:
+            contents = output.getvalue()
+            for line in re.split(r"[~\r\n]+", contents):
+                if line:
+                    temp = line.split("\t")
+                    #temp = map(lambda x: x if x.startswith('"') and x.endswith('"') else '"{}"'.format(x), temp)
+                    temp = map(lambda x: '' if x.startswith('"') and x.endswith('"') and len(x) == 2 else x, temp)
+                    f.write("{}\n".format("\t".join(temp).decode('utf-8')))
+
         output.close()
 
 
@@ -145,13 +163,17 @@ class DPID(object):
         for line in p.stdout.readlines():
             print line,
         retval = p.wait()
-        print retval
+
+        # retval always returns 0 regardless
+        # read this file txt_filename.replace('.mdb', '') into access db???
+
+
 
 if __name__ == '__main__':
 
     startTime = datetime.datetime.now()
     con = db.get_connection()
-    app = DPID(1360, con)
+    app = DPID(474, con)
     app.run()
     con.commit()
     log.info(datetime.datetime.now() - startTime)

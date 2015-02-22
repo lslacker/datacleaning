@@ -1,12 +1,13 @@
 
 import os
-import export2db
+import pyodbc
 import db
 import cStringIO
 import utils
 import datetime
 import subprocess
 import re
+import shutil
 import codecs
 
 try:
@@ -16,6 +17,7 @@ except:
     import logging
     log = logging.getlogger()
 
+BASE_DIR = os.path.dirname(__file__)
 
 DEFAULT_TEMPLATE = """[Input Fields]
 Address Line 1={0}
@@ -28,12 +30,12 @@ Postcode=%s
 Customer Info=
 
 [Output Fields]
-Dt Address Line=Corrected Add
+Dt Address Line=
 Dt Locality=
 Dt State=
 Dt Postcode=
 Dt Match Type=Error
-Dt Sort Plan No=BSP Key
+Dt Sort Plan No=BSPKey
 Dt PPSP=PrintPost
 Dt Barcode=Barcode
 Dt DPID=DPID
@@ -156,9 +158,10 @@ class DPID(object):
         self.generate_tpl(field_list, tpl_filename, src_table)
 
         #3.run
+        output = txt_filename.replace('.mdb', '')
         CMDLINE1 = '"C:\Program Files\DataTools\DtFpcDpid.exe" "%s", "%s", "%s"'
         print CMDLINE1 % (txt_filename, txt_filename.replace('.mdb', ''), tpl_filename)
-        p = subprocess.Popen(CMDLINE1 % (txt_filename, txt_filename.replace('.mdb', ''), tpl_filename), shell=True,
+        p = subprocess.Popen(CMDLINE1 % (txt_filename, output, tpl_filename), shell=True,
                              stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         for line in p.stdout.readlines():
             print line,
@@ -166,16 +169,77 @@ class DPID(object):
 
         # retval always returns 0 regardless
         # read this file txt_filename.replace('.mdb', '') into access db???
+        access_filename = txt_filename.replace('.txt', '')
+        shutil.copy(os.path.join(BASE_DIR, 'template.mdb'), access_filename)
+        #print access_filename
+        connection_string = 'Driver={Microsoft Access Driver (*.mdb)};Dbq=%s;Uid=;Pwd=;' % access_filename
+        conn = pyodbc.connect(connection_string)
+        cursor = conn.cursor()
 
+        # codecs.open(output, encoding='utf-8', mode='r', errors='replace')
+        with open(output, 'r') as f:
+            createQuery = 'create table MailMerge (\n'
+            new_header = f.readline()[:-1].split('\t')
+            createQuery = 'create table MailMerge (\n'
+
+            for aField in new_header:
+                createQuery = createQuery + ' %s text,\n' % aField
+
+            createQuery = createQuery[:-2] + ')'
+            #print createQuery
+            cursor.execute(createQuery)
+
+
+            insertQuery = "insert into %s values (%s" % ('MailMerge', "?,"*(len(new_header)))
+            insertQuery = insertQuery[:-1]+')'
+
+            for line in f.readlines():
+                row = line[:-1].split('\t')
+                row = map(lambda x: x[1:-1] if x.startswith('"') and x.endswith('"') else x, row)
+                #print row
+                cursor.execute(insertQuery, row)
+
+        # now make access database the same output as blink
+        cursor.execute("""UPDATE MailMerge SET PrintPost = '0' where PrintPost = ''""")
+        cursor.execute("""ALTER TABLE MailMerge alter column PrintPost number""")
+        cursor.execute("""UPDATE MailMerge set [BSPKey]='1'+[BSPKey] WHERE Val([BSPKey])=1""")
+        cursor.execute("""UPDATE MailMerge set [BSPKey]='2'+[BSPKey] WHERE Val([BSPKey]) between 3 and 21""")
+        cursor.execute("""UPDATE MailMerge set [BSPKey]='3'+[BSPKey] WHERE Val([BSPKey]) between 22 and 34""")
+        cursor.execute("""UPDATE MailMerge set [BSPKey]='4'+[BSPKey] WHERE (Val([BSPKey]) between 35 and 44) or Val([BSPKey])=2""")
+        cursor.execute("""UPDATE MailMerge set [BSPKey]='5'+[BSPKey] WHERE (Val([BSPKey]) between 45 and 48)""")
+        cursor.execute("""UPDATE MailMerge set [BSPKey]='6'+[BSPKey] WHERE (Val([BSPKey]) between 49 and 53)""")
+        cursor.execute("""UPDATE MailMerge set [BSPKey]='7'+[BSPKey] WHERE (Val([BSPKey])=54)""")
+        cursor.execute("""UPDATE MailMerge set [BSPKey]='0999' WHERE (Val([BSPKey])=0)""")
+
+        # now add extra field to match blink (corrected add, correct field)
+        t_address = [x for x in field_list if x]
+        #print t_address
+        idx = 1
+        for t in t_address:
+            cursor.execute("""ALTER TABLE MailMerge add column "Corrected Add{}" text(40)""".format(idx))
+            idx += 1
+
+        for i in range(3):
+            cursor.execute("""ALTER TABLE MailMerge add column "Corrected Field{}" text(40)""".format(idx))
+            idx += 1
+
+        cursor.execute("""ALTER TABLE MailMerge add column "Field Corrected" text(40)""")
+
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        # now delete temp file
+        os.remove(output)
+        os.remove(txt_filename)
+        os.remove(tpl_filename)
 
 
 if __name__ == '__main__':
-
     startTime = datetime.datetime.now()
     con = db.get_connection()
-    app = DPID(474, con)
+    app = DPID(474, con)  # 474, 1360
     app.run()
     con.commit()
     log.info(datetime.datetime.now() - startTime)
-
 

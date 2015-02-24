@@ -39,7 +39,7 @@ Dt Sort Plan No=BSPKey
 Dt PPSP=PrintPost
 Dt Barcode=Barcode
 Dt DPID=DPID
-Dt PP Sort Ind=Metro Or Country
+Dt PP Sort Ind=Dt Metro or Country
 
 [Options]
 Barcode Size=
@@ -100,7 +100,7 @@ class DPID(object):
                     temp = line.split("\t")
                     #temp = map(lambda x: x if x.startswith('"') and x.endswith('"') else '"{}"'.format(x), temp)
                     temp = map(lambda x: '' if x.startswith('"') and x.endswith('"') and len(x) == 2 else x, temp)
-                    f.write("{}\n".format("\t".join(temp).decode('utf-8')))
+                    f.write("{}\n".format("\t".join(temp)))
 
         output.close()
 
@@ -178,9 +178,8 @@ class DPID(object):
 
         # codecs.open(output, encoding='utf-8', mode='r', errors='replace')
         with open(output, 'r') as f:
-            createQuery = 'create table MailMerge (\n'
+            createQuery = 'create table MailMerge1 (\n'
             new_header = f.readline()[:-1].split('\t')
-            createQuery = 'create table MailMerge (\n'
 
             for aField in new_header:
                 createQuery = createQuery + ' %s text,\n' % aField
@@ -189,8 +188,7 @@ class DPID(object):
             #print createQuery
             cursor.execute(createQuery)
 
-
-            insertQuery = "insert into %s values (%s" % ('MailMerge', "?,"*(len(new_header)))
+            insertQuery = "insert into %s values (%s" % ('MailMerge1', "?,"*(len(new_header)))
             insertQuery = insertQuery[:-1]+')'
 
             for line in f.readlines():
@@ -200,30 +198,52 @@ class DPID(object):
                 cursor.execute(insertQuery, row)
 
         # now make access database the same output as blink
-        cursor.execute("""UPDATE MailMerge SET PrintPost = '0' where PrintPost = ''""")
-        cursor.execute("""ALTER TABLE MailMerge alter column PrintPost number""")
-        cursor.execute("""UPDATE MailMerge set [BSPKey]='1'+[BSPKey] WHERE Val([BSPKey])=1""")
-        cursor.execute("""UPDATE MailMerge set [BSPKey]='2'+[BSPKey] WHERE Val([BSPKey]) between 3 and 21""")
-        cursor.execute("""UPDATE MailMerge set [BSPKey]='3'+[BSPKey] WHERE Val([BSPKey]) between 22 and 34""")
-        cursor.execute("""UPDATE MailMerge set [BSPKey]='4'+[BSPKey] WHERE (Val([BSPKey]) between 35 and 44) or Val([BSPKey])=2""")
-        cursor.execute("""UPDATE MailMerge set [BSPKey]='5'+[BSPKey] WHERE (Val([BSPKey]) between 45 and 48)""")
-        cursor.execute("""UPDATE MailMerge set [BSPKey]='6'+[BSPKey] WHERE (Val([BSPKey]) between 49 and 53)""")
-        cursor.execute("""UPDATE MailMerge set [BSPKey]='7'+[BSPKey] WHERE (Val([BSPKey])=54)""")
-        cursor.execute("""UPDATE MailMerge set [BSPKey]='0999' WHERE (Val([BSPKey])=0)""")
-
+        cursor.execute("""UPDATE MailMerge1 SET PrintPost = '0' where PrintPost = ''""")
+        cursor.execute("""ALTER TABLE MailMerge1 alter column PrintPost number""")
+        cursor.execute("""UPDATE MailMerge1 set [BSPKey]='1'+[BSPKey] WHERE Val([BSPKey])=1""")
+        cursor.execute("""UPDATE MailMerge1 set [BSPKey]='2'+[BSPKey] WHERE Val([BSPKey]) between 3 and 21""")
+        cursor.execute("""UPDATE MailMerge1 set [BSPKey]='3'+[BSPKey] WHERE Val([BSPKey]) between 22 and 34""")
+        cursor.execute("""UPDATE MailMerge1 set [BSPKey]='4'+[BSPKey] WHERE (Val([BSPKey]) between 35 and 44) or Val([BSPKey])=2""")
+        cursor.execute("""UPDATE MailMerge1 set [BSPKey]='5'+[BSPKey] WHERE (Val([BSPKey]) between 45 and 48)""")
+        cursor.execute("""UPDATE MailMerge1 set [BSPKey]='6'+[BSPKey] WHERE (Val([BSPKey]) between 49 and 53)""")
+        cursor.execute("""UPDATE MailMerge1 set [BSPKey]='7'+[BSPKey] WHERE (Val([BSPKey])=54)""")
+        cursor.execute("""UPDATE MailMerge1 set [BSPKey]='0999' WHERE (Val([BSPKey])=0)""")
+        cursor.execute("""UPDATE MailMerge1 set [BSPKey]=LEFT([BSPKey],1) + '999' WHERE Barcode=''""")
         # now add extra field to match blink (corrected add, correct field)
         t_address = [x for x in field_list if x]
         #print t_address
         idx = 1
+        blink_fields = []
         for t in t_address:
-            cursor.execute("""ALTER TABLE MailMerge add column "Corrected Add{}" text(40)""".format(idx))
+            cursor.execute("""ALTER TABLE MailMerge1 add column "Corrected Add{}" text(40)""".format(idx))
+            blink_fields.append("[Corrected Add{}]".format(idx))
             idx += 1
 
         for i in range(3):
-            cursor.execute("""ALTER TABLE MailMerge add column "Corrected Field{}" text(40)""".format(idx))
+            cursor.execute("""ALTER TABLE MailMerge1 add column "Corrected Field{}" text(40)""".format(idx))
+            blink_fields.append("[Corrected Field{}]".format(idx))
             idx += 1
 
-        cursor.execute("""ALTER TABLE MailMerge add column "Field Corrected" text(40)""")
+        cursor.execute("""ALTER TABLE MailMerge1 add column "Field Corrected" text(40)""")
+        blink_fields.append("[Field Corrected]")
+
+        # now re-arrange fields in table
+        # remove BSPKey, PrintPost, Barcode in new_header
+        new_header = ['[{}]'.format(x[1:-1]) for x in new_header]  # remove double quote
+        new_header.remove('[BSPKey]')
+        new_header.remove('[PrintPost]')
+        new_header.remove('[Barcode]')
+        new_header.remove('[DPID]')
+        new_header.remove('[Error]')
+
+        dtool_fields = [x for x in new_header if x.startswith('[Dt ')]
+        balance_fields = [x for x in new_header if not x.startswith('[Dt ')]
+
+        query = 'SELECT BSPKey, PrintPost, Barcode, {0}, Error, DPID, {1}, {2} INTO MailMerge from MailMerge1'
+
+        cursor.execute(query.format(','.join(balance_fields), ','.join(blink_fields), ','.join(dtool_fields)))
+
+        cursor.execute('drop table MailMerge1')
 
         conn.commit()
         cursor.close()
@@ -238,7 +258,8 @@ class DPID(object):
 if __name__ == '__main__':
     startTime = datetime.datetime.now()
     con = db.get_connection()
-    app = DPID(474, con)  # 474, 1360
+    #347
+    app = DPID(474, con)  # 474, 1360, <--------- please change taskid number here 474 Hertz, 1360 Holden, what is your taskid number?
     app.run()
     con.commit()
     log.info(datetime.datetime.now() - startTime)

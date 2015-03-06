@@ -259,7 +259,7 @@ if __name__ == '__main__':
     startTime = datetime.datetime.now()
     con = db.get_connection()
     #347
-    app = DPID(474, con)  # 474, 1360, <--------- please change taskid number here 474 Hertz, 1360 Holden, what is your taskid number?
+    app = DPID(347, con)  # 474, 1360, <--------- please change taskid number here 474 Hertz, 1360 Holden, what is your taskid number?
     app.run()
     con.commit()
     log.info(datetime.datetime.now() - startTime)

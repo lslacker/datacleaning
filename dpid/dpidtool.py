@@ -46,7 +46,7 @@ Barcode Size=
 Barcode Encoding Method=
 Input File Delimiter=Tab
 Input File Text Qualifier=
-Output File Delimiter=Tab
+Output File Delimiter=
 Result Totals File Name="""
 
 
@@ -85,6 +85,7 @@ class DPID(object):
     def generate_text_file(self, src_table, filename, cur):
         #texter = export2db.textwriter.TextWriter(filename)
         params = """WITH DELIMITER AS '\t' NULL AS '' CSV HEADER"""
+        #params = """WITH DELIMITER AS ',' NULL AS '' CSV HEADER QUOTE '"'"""
         select_query = "SELECT * FROM {0}".format(src_table)
         output = cStringIO.StringIO()
         cur.copy_expert("COPY ({0}) TO STDOUT {1}".format(select_query, params), output)
@@ -171,32 +172,37 @@ class DPID(object):
         # read this file txt_filename.replace('.mdb', '') into access db???
         access_filename = txt_filename.replace('.txt', '')
         shutil.copy(os.path.join(BASE_DIR, 'template.mdb'), access_filename)
+
         #print access_filename
         connection_string = 'Driver={Microsoft Access Driver (*.mdb)};Dbq=%s;Uid=;Pwd=;' % access_filename
         conn = pyodbc.connect(connection_string)
         cursor = conn.cursor()
 
-        # codecs.open(output, encoding='utf-8', mode='r', errors='replace')
+        codecs.open(output, encoding='utf-8', mode='r', errors='replace')
         with open(output, 'r') as f:
-            createQuery = 'create table MailMerge1 (\n'
-            new_header = f.readline()[:-1].split('\t')
+            # createQuery = 'create table MailMerge1 (\n'
+            new_header = f.readline()[:-1].split(',')
 
-            for aField in new_header:
-                createQuery = createQuery + ' %s text,\n' % aField
+            # for aField in new_header:
+            #     createQuery = createQuery + ' %s text,\n' % aField
+            #
+            # createQuery = createQuery[:-2] + ')'
+            # #print createQuery
+            # cursor.execute(createQuery)
+            #
+            # insertQuery = "insert into %s values (%s" % ('MailMerge1', "?,"*(len(new_header)))
+            # insertQuery = insertQuery[:-1]+')'
+            #
+            # for line in f.readlines():
+            #     row = line[:-1].split('\t')
+            #     row = map(lambda x: x[1:-1] if x.startswith('"') and x.endswith('"') else x, row)
+            #     #print row
+            #     cursor.execute(insertQuery, row)
 
-            createQuery = createQuery[:-2] + ')'
-            #print createQuery
-            cursor.execute(createQuery)
-
-            insertQuery = "insert into %s values (%s" % ('MailMerge1', "?,"*(len(new_header)))
-            insertQuery = insertQuery[:-1]+')'
-
-            for line in f.readlines():
-                row = line[:-1].split('\t')
-                row = map(lambda x: x[1:-1] if x.startswith('"') and x.endswith('"') else x, row)
-                #print row
-                cursor.execute(insertQuery, row)
-
+        cursor.execute('''
+        SELECT *
+        into MailMerge1
+        from [Text;FMT=Delimited;HDR=YES;DATABASE={0}].[{1}]'''.format(os.path.dirname(output), os.path.basename(output)))
         # now make access database the same output as blink
         cursor.execute("""UPDATE MailMerge1 SET PrintPost = '0' where PrintPost = ''""")
         cursor.execute("""ALTER TABLE MailMerge1 alter column PrintPost number""")
@@ -259,7 +265,7 @@ if __name__ == '__main__':
     startTime = datetime.datetime.now()
     con = db.get_connection()
     #347
-    app = DPID(347, con)  # 474, 1360, <--------- please change taskid number here 474 Hertz, 1360 Holden, what is your taskid number?
+    app = DPID(474, con)  # 474, 1360, <--------- please change taskid number here 474 Hertz, 1360 Holden, what is your taskid number?
     app.run()
     con.commit()
     log.info(datetime.datetime.now() - startTime)

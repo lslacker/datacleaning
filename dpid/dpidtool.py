@@ -203,9 +203,12 @@ class DPID(object):
         SELECT *
         into MailMerge1
         from [Text;FMT=Delimited;HDR=YES;DATABASE={0}].[{1}]'''.format(os.path.dirname(output), os.path.basename(output)))
+        for a_header in new_header:
+            cursor.execute("UPDATE MailMerge1 set {0}='' where {0} is null".format(a_header))
         # now make access database the same output as blink
-        cursor.execute("""UPDATE MailMerge1 SET PrintPost = '0' where PrintPost = ''""")
+        cursor.execute("""UPDATE MailMerge1 SET PrintPost = '0' where PrintPost = '' or PrintPost is null""")
         cursor.execute("""ALTER TABLE MailMerge1 alter column PrintPost number""")
+        #cursor.execute("""UPDATE MailMerge1 set [BSPKey]='0' WHERE [BSPKey] is null""")
         cursor.execute("""UPDATE MailMerge1 set [BSPKey]='1'+[BSPKey] WHERE Val([BSPKey])=1""")
         cursor.execute("""UPDATE MailMerge1 set [BSPKey]='2'+[BSPKey] WHERE Val([BSPKey]) between 3 and 21""")
         cursor.execute("""UPDATE MailMerge1 set [BSPKey]='3'+[BSPKey] WHERE Val([BSPKey]) between 22 and 34""")
@@ -214,7 +217,8 @@ class DPID(object):
         cursor.execute("""UPDATE MailMerge1 set [BSPKey]='6'+[BSPKey] WHERE (Val([BSPKey]) between 49 and 53)""")
         cursor.execute("""UPDATE MailMerge1 set [BSPKey]='7'+[BSPKey] WHERE (Val([BSPKey])=54)""")
         cursor.execute("""UPDATE MailMerge1 set [BSPKey]='0999' WHERE (Val([BSPKey])=0)""")
-        cursor.execute("""UPDATE MailMerge1 set [BSPKey]=LEFT([BSPKey],1) + '999' WHERE Barcode=''""")
+        cursor.execute("""UPDATE MailMerge1 set [BSPKey]=LEFT([BSPKey],1) + '999' WHERE Barcode='' or Barcode is null""")
+
         # now add extra field to match blink (corrected add, correct field)
         t_address = [x for x in field_list if x]
         #print t_address
@@ -265,7 +269,7 @@ if __name__ == '__main__':
     startTime = datetime.datetime.now()
     con = db.get_connection()
     #347
-    app = DPID(474, con)  # 474, 1360, <--------- please change taskid number here 474 Hertz, 1360 Holden, what is your taskid number?
+    app = DPID(1360, con)  # 474, 1360, <--------- please change taskid number here 474 Hertz, 1360 Holden, what is your taskid number?
     app.run()
     con.commit()
     log.info(datetime.datetime.now() - startTime)

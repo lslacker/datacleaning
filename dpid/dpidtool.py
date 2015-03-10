@@ -249,7 +249,7 @@ class DPID(object):
         dtool_fields = [x for x in new_header if x.startswith('[Dt ')]
         balance_fields = [x for x in new_header if not x.startswith('[Dt ')]
 
-        query = 'SELECT BSPKey, PrintPost, Barcode, {0}, Error, DPID, {1}, {2} INTO MailMerge from MailMerge1'
+        query = 'SELECT BSPKey, PrintPost, Barcode, {0}, DPID, Error, {1}, {2} INTO MailMerge from MailMerge1'
 
         cursor.execute(query.format(','.join(balance_fields), ','.join(blink_fields), ','.join(dtool_fields)))
 

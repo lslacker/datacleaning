@@ -178,7 +178,6 @@ class DPID(object):
         conn = pyodbc.connect(connection_string)
         cursor = conn.cursor()
 
-        codecs.open(output, encoding='utf-8', mode='r', errors='replace')
         with open(output, 'r') as f:
             # createQuery = 'create table MailMerge1 (\n'
             new_header = f.readline()[:-1].split(',')

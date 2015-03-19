@@ -68,16 +68,16 @@ class Export2File(object):
 
         if '.txt' in filename.lower():
             texter = textwriter.TextWriter(filename)
-            params = """WITH DELIMITER AS '\t' NULL AS '' CSV HEADER ENCODING 'utf-8'"""
+            params = """WITH DELIMITER AS '\t' NULL AS '\N' CSV HEADER ENCODING 'utf-8'"""
         elif '.csv' in filename.lower():
             texter = textwriter.TextWriter(filename)
-            params = """WITH DELIMITER AS ',' NULL AS '' CSV HEADER QUOTE AS '"' FORCE QUOTE * ENCODING 'utf-8'"""
+            params = """WITH DELIMITER AS ',' NULL AS '\N' CSV HEADER QUOTE AS '"' FORCE QUOTE * ENCODING 'utf-8'"""
         elif '.bat' in filename.lower():
             texter = textwriter.TextWriter(filename)
-            params = """WITH DELIMITER AS ',' NULL AS '' ENCODING 'utf-8'"""
+            params = """WITH DELIMITER AS ',' NULL AS '\N' ENCODING 'utf-8'"""
         elif '.xlsx' in filename.lower():
             texter = excelwriter.ExcelWriter(filename)
-            params = """WITH DELIMITER AS '\t' NULL AS '' CSV HEADER ENCODING 'utf-8'"""
+            params = """WITH DELIMITER AS '\t' NULL AS '\N' CSV HEADER ENCODING 'utf-8'"""
         else:
             raise RuntimeError('Only support .txt, .csv, .bat, and .xlsx')
 
@@ -92,7 +92,7 @@ if __name__ == '__main__':
 
     startTime = datetime.datetime.now()
     conn = db.get_connection()
-    app = Export2File(1420, conn)
+    app = Export2File(1099, conn)
     app.run()
     conn.commit()
     log.info(datetime.datetime.now() - startTime)

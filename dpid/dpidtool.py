@@ -206,7 +206,7 @@ class DPID(object):
             cursor.execute("UPDATE MailMerge1 set {0}='' where {0} is null".format(a_header))
         # now make access database the same output as blink
         cursor.execute("""UPDATE MailMerge1 SET PrintPost = '0' where PrintPost = '' or PrintPost is null""")
-        cursor.execute("""ALTER TABLE MailMerge1 alter column PrintPost number""")
+        cursor.execute("""ALTER TABLE MailMerge1 alter column PrintPost Long""")
         #cursor.execute("""UPDATE MailMerge1 set [BSPKey]='0' WHERE [BSPKey] is null""")
         cursor.execute("""UPDATE MailMerge1 set [BSPKey]='1'+[BSPKey] WHERE Val([BSPKey])=1""")
         cursor.execute("""UPDATE MailMerge1 set [BSPKey]='2'+[BSPKey] WHERE Val([BSPKey]) between 3 and 21""")

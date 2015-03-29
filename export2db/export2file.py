@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-import textwriter
+import codecs
 import excelwriter
 import psycopg2
 import psycopg2.extras
@@ -65,15 +65,15 @@ class Export2File(object):
         filename = utils.mm_translate(result.dest_file, environment_vars)
         field_names = result.field_names
         filter_ = result.filter
-
+        texter = None
         if '.txt' in filename.lower():
-            texter = textwriter.TextWriter(filename)
+            #texter = textwriter.TextWriter(filename)
             params = """WITH DELIMITER AS '\t' NULL AS '\N' CSV HEADER ENCODING 'utf-8'"""
         elif '.csv' in filename.lower():
-            texter = textwriter.TextWriter(filename)
+            #texter = textwriter.TextWriter(filename)
             params = """WITH DELIMITER AS ',' NULL AS '\N' CSV HEADER QUOTE AS '"' FORCE QUOTE * ENCODING 'utf-8'"""
         elif '.bat' in filename.lower():
-            texter = textwriter.TextWriter(filename)
+            #texter = textwriter.TextWriter(filename)
             params = """WITH DELIMITER AS ',' NULL AS '\N' ENCODING 'utf-8'"""
         elif '.xlsx' in filename.lower():
             texter = excelwriter.ExcelWriter(filename)
@@ -82,11 +82,15 @@ class Export2File(object):
             raise RuntimeError('Only support .txt, .csv, .bat, and .xlsx')
 
         select_query = "SELECT {0} FROM {1} {2}".format(field_names, src_table, filter_)
-        output = cStringIO.StringIO()
-        cur.copy_expert("COPY ({0}) TO STDOUT {1}".format(select_query, params), output)
-        texter.write(output)
-        texter.save()
-        output.close()
+        if texter:
+            output = cStringIO.StringIO()
+            cur.copy_expert("COPY ({0}) TO STDOUT {1}".format(select_query, params), output)
+            texter.write(output)
+            texter.save()
+            output.close()
+        else:
+            with open(filename, 'w') as f:
+                cur.copy_expert("COPY ({0}) TO STDOUT {1}".format(select_query, params), f)
 
 if __name__ == '__main__':
 

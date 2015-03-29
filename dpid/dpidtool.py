@@ -84,26 +84,27 @@ class DPID(object):
 
     def generate_text_file(self, src_table, filename, cur):
         #texter = export2db.textwriter.TextWriter(filename)
-        params = """WITH DELIMITER AS '\t' NULL AS '' CSV HEADER"""
+        params = """WITH DELIMITER AS '\t' NULL AS '\N' CSV HEADER"""
         #params = """WITH DELIMITER AS ',' NULL AS '' CSV HEADER QUOTE '"'"""
         select_query = "SELECT * FROM {0}".format(src_table)
         output = cStringIO.StringIO()
-        cur.copy_expert("COPY ({0}) TO STDOUT {1}".format(select_query, params), output)
+        with open(filename, 'w') as f:
+            cur.copy_expert("COPY ({0}) TO STDOUT {1}".format(select_query, params), f)
         #cur.copy_to(output, src_table, sep='\t', null='\\N', columns=None)
         #texter.write(output)
         #texter.save()
-        output.seek(0)
-        with open(filename, 'w') as f:
-        #with codecs.open(filename, mode="w", encoding="utf-8") as f:
-            contents = output.getvalue()
-            for line in re.split(r"[~\r\n]+", contents):
-                if line:
-                    temp = line.split("\t")
-                    #temp = map(lambda x: x if x.startswith('"') and x.endswith('"') else '"{}"'.format(x), temp)
-                    temp = map(lambda x: '' if x.startswith('"') and x.endswith('"') and len(x) == 2 else x, temp)
-                    f.write("{}\n".format("\t".join(temp)))
-
-        output.close()
+        # output.seek(0)
+        # with open(filename, 'w') as f:
+        # #with codecs.open(filename, mode="w", encoding="utf-8") as f:
+        #     contents = output.getvalue()
+        #     for line in re.split(r"[~\r\n]+", contents):
+        #         if line:
+        #             temp = line.split("\t")
+        #             #temp = map(lambda x: x if x.startswith('"') and x.endswith('"') else '"{}"'.format(x), temp)
+        #             temp = map(lambda x: '' if x.startswith('"') and x.endswith('"') and len(x) == 2 else x, temp)
+        #             f.write("{}\n".format("\t".join(temp)))
+        #
+        # output.close()
 
 
     def run(self):
@@ -175,7 +176,7 @@ class DPID(object):
 
         #print access_filename
         connection_string = 'Driver={Microsoft Access Driver (*.mdb)};Dbq=%s;Uid=;Pwd=;' % access_filename
-        conn = pyodbc.connect(connection_string)
+        conn = pyodbc.connect(connection_string, autocommit=True)
         cursor = conn.cursor()
 
         with open(output, 'r') as f:
@@ -206,8 +207,8 @@ class DPID(object):
             cursor.execute("UPDATE MailMerge1 set {0}='' where {0} is null".format(a_header))
         # now make access database the same output as blink
         cursor.execute("""UPDATE MailMerge1 SET PrintPost = '0' where PrintPost = '' or PrintPost is null""")
-        cursor.execute("""ALTER TABLE MailMerge1 alter column PrintPost Long""")
-        #cursor.execute("""UPDATE MailMerge1 set [BSPKey]='0' WHERE [BSPKey] is null""")
+        #cursor.execute("""ALTER TABLE MailMerge1 alter column PrintPost Long""")
+        cursor.execute("""UPDATE MailMerge1 set [BSPKey]='0' WHERE [BSPKey] is null""")
         cursor.execute("""UPDATE MailMerge1 set [BSPKey]='1'+[BSPKey] WHERE Val([BSPKey])=1""")
         cursor.execute("""UPDATE MailMerge1 set [BSPKey]='2'+[BSPKey] WHERE Val([BSPKey]) between 3 and 21""")
         cursor.execute("""UPDATE MailMerge1 set [BSPKey]='3'+[BSPKey] WHERE Val([BSPKey]) between 22 and 34""")
@@ -268,7 +269,7 @@ if __name__ == '__main__':
     startTime = datetime.datetime.now()
     con = db.get_connection()
     #347
-    app = DPID(1360, con)  # 474, 1360, <--------- please change taskid number here 474 Hertz, 1360 Holden, what is your taskid number?
+    app = DPID(359, con)  # 474, 1360, <--------- please change taskid number here 474 Hertz, 1360 Holden, what is your taskid number?
     app.run()
     con.commit()
     log.info(datetime.datetime.now() - startTime)

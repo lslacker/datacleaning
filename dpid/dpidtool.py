@@ -1,4 +1,4 @@
-
+import sqlite3
 import os
 import pyodbc
 import db
@@ -6,7 +6,7 @@ import cStringIO
 import utils
 import datetime
 import subprocess
-import re
+import csv
 import shutil
 import codecs
 
@@ -172,52 +172,53 @@ class DPID(object):
         # retval always returns 0 regardless
         # read this file txt_filename.replace('.mdb', '') into access db???
         access_filename = txt_filename.replace('.txt', '')
-        shutil.copy(os.path.join(BASE_DIR, 'template.mdb'), access_filename)
+        # shutil.copy(os.path.join(BASE_DIR, 'template.mdb'), access_filename)
 
-        #print access_filename
-        connection_string = 'Driver={Microsoft Access Driver (*.mdb)};Dbq=%s;Uid=;Pwd=;' % access_filename
-        conn = pyodbc.connect(connection_string, autocommit=True)
+        conn = sqlite3.connect(access_filename)
         cursor = conn.cursor()
+        cursor.execute('BEGIN')
+        cursor.execute('DROP TABLE IF EXISTS MailMerge1')
 
         with open(output, 'r') as f:
-            # createQuery = 'create table MailMerge1 (\n'
-            new_header = f.readline()[:-1].split(',')
+            reader = csv.reader(f)
 
-            # for aField in new_header:
-            #     createQuery = createQuery + ' %s text,\n' % aField
-            #
-            # createQuery = createQuery[:-2] + ')'
-            # #print createQuery
-            # cursor.execute(createQuery)
-            #
-            # insertQuery = "insert into %s values (%s" % ('MailMerge1', "?,"*(len(new_header)))
-            # insertQuery = insertQuery[:-1]+')'
-            #
-            # for line in f.readlines():
-            #     row = line[:-1].split('\t')
-            #     row = map(lambda x: x[1:-1] if x.startswith('"') and x.endswith('"') else x, row)
-            #     #print row
-            #     cursor.execute(insertQuery, row)
+            createQuery = 'create table MailMerge1 (\n'
+            new_header = next(reader)
 
-        cursor.execute('''
-        SELECT *
-        into MailMerge1
-        from [Text;FMT=Delimited;HDR=YES;DATABASE={0}].[{1}]'''.format(os.path.dirname(output), os.path.basename(output)))
-        for a_header in new_header:
-            cursor.execute("UPDATE MailMerge1 set {0}='' where {0} is null".format(a_header))
+            for aField in new_header:
+                createQuery = createQuery + ' "%s" text,\n' % aField
+
+            createQuery = createQuery[:-2] + ')'
+            # print createQuery
+            cursor.execute(createQuery)
+
+            insertQuery = "insert into %s values (%s" % ('MailMerge1', "?,"*(len(new_header)))
+            insertQuery = insertQuery[:-1]+')'
+
+            for row in reader:
+                cursor.execute(insertQuery, row)
+
+        # cursor.execute('''
+        # SELECT *
+        # into MailMerge1
+        # from [Text;FMT=Delimited;HDR=YES;DATABASE={0}].[{1}]'''.format(os.path.dirname(output), os.path.basename(output)))
+        # for a_header in new_header:
+        #     cursor.execute("UPDATE MailMerge1 set {0}='' where {0} is null".format(a_header))
+
+
         # now make access database the same output as blink
         cursor.execute("""UPDATE MailMerge1 SET PrintPost = '0' where PrintPost = '' or PrintPost is null""")
         #cursor.execute("""ALTER TABLE MailMerge1 alter column PrintPost Long""")
-        cursor.execute("""UPDATE MailMerge1 set [BSPKey]='0' WHERE [BSPKey] is null""")
-        cursor.execute("""UPDATE MailMerge1 set [BSPKey]='1'+[BSPKey] WHERE Val([BSPKey])=1""")
-        cursor.execute("""UPDATE MailMerge1 set [BSPKey]='2'+[BSPKey] WHERE Val([BSPKey]) between 3 and 21""")
-        cursor.execute("""UPDATE MailMerge1 set [BSPKey]='3'+[BSPKey] WHERE Val([BSPKey]) between 22 and 34""")
-        cursor.execute("""UPDATE MailMerge1 set [BSPKey]='4'+[BSPKey] WHERE (Val([BSPKey]) between 35 and 44) or Val([BSPKey])=2""")
-        cursor.execute("""UPDATE MailMerge1 set [BSPKey]='5'+[BSPKey] WHERE (Val([BSPKey]) between 45 and 48)""")
-        cursor.execute("""UPDATE MailMerge1 set [BSPKey]='6'+[BSPKey] WHERE (Val([BSPKey]) between 49 and 53)""")
-        cursor.execute("""UPDATE MailMerge1 set [BSPKey]='7'+[BSPKey] WHERE (Val([BSPKey])=54)""")
-        cursor.execute("""UPDATE MailMerge1 set [BSPKey]='0999' WHERE (Val([BSPKey])=0)""")
-        cursor.execute("""UPDATE MailMerge1 set [BSPKey]=LEFT([BSPKey],1) + '999' WHERE Barcode='' or Barcode is null""")
+        cursor.execute("""UPDATE MailMerge1 set BSPKey='0' WHERE BSPKey is null or BSPKey = ''""")
+        cursor.execute("""UPDATE MailMerge1 set BSPKey='1'+BSPKey WHERE Cast(BSPKey as INTEGER)=1""")
+        cursor.execute("""UPDATE MailMerge1 set BSPKey='2'+BSPKey WHERE Cast(BSPKey as INTEGER) between 3 and 21""")
+        cursor.execute("""UPDATE MailMerge1 set BSPKey='3'+BSPKey WHERE Cast(BSPKey as INTEGER) between 22 and 34""")
+        cursor.execute("""UPDATE MailMerge1 set BSPKey='4'+BSPKey WHERE (Cast(BSPKey as INTEGER) between 35 and 44) or Cast(BSPKey as INTEGER)=2""")
+        cursor.execute("""UPDATE MailMerge1 set BSPKey='5'+BSPKey WHERE (Cast(BSPKey as INTEGER) between 45 and 48)""")
+        cursor.execute("""UPDATE MailMerge1 set BSPKey='6'+BSPKey WHERE (Cast(BSPKey as INTEGER) between 49 and 53)""")
+        cursor.execute("""UPDATE MailMerge1 set BSPKey='7'+BSPKey WHERE (Cast(BSPKey as INTEGER)=54)""")
+        cursor.execute("""UPDATE MailMerge1 set BSPKey='0999' WHERE (Cast(BSPKey as INTEGER)=0)""")
+        cursor.execute("""UPDATE MailMerge1 set BSPKey=substr(BSPKey,1, 1) + '999' WHERE Barcode='' or Barcode is null""")
 
         # now add extra field to match blink (corrected add, correct field)
         t_address = [x for x in field_list if x]
@@ -225,34 +226,35 @@ class DPID(object):
         idx = 1
         blink_fields = []
         for t in t_address:
-            cursor.execute("""ALTER TABLE MailMerge1 add column "Corrected Add{}" text(40)""".format(idx))
-            blink_fields.append("[Corrected Add{}]".format(idx))
+            cursor.execute("""ALTER TABLE MailMerge1 add column "Corrected Add{}" text""".format(idx))
+            blink_fields.append("Corrected Add{}".format(idx))
             idx += 1
 
         for i in range(3):
-            cursor.execute("""ALTER TABLE MailMerge1 add column "Corrected Field{}" text(40)""".format(idx))
-            blink_fields.append("[Corrected Field{}]".format(idx))
+            cursor.execute("""ALTER TABLE MailMerge1 add column "Corrected Field{}" text""".format(idx))
+            blink_fields.append("Corrected Field{}".format(idx))
             idx += 1
 
-        cursor.execute("""ALTER TABLE MailMerge1 add column "Field Corrected" text(40)""")
-        blink_fields.append("[Field Corrected]")
+        cursor.execute("""ALTER TABLE MailMerge1 add column "Field Corrected" text""")
+        blink_fields.append("Field Corrected")
 
         # now re-arrange fields in table
         # remove BSPKey, PrintPost, Barcode in new_header
-        new_header = ['[{}]'.format(x[1:-1]) for x in new_header]  # remove double quote
-        new_header.remove('[BSPKey]')
-        new_header.remove('[PrintPost]')
-        new_header.remove('[Barcode]')
-        new_header.remove('[DPID]')
-        new_header.remove('[Error]')
 
-        dtool_fields = [x for x in new_header if x.startswith('[Dt ')]
-        balance_fields = [x for x in new_header if not x.startswith('[Dt ')]
+        new_header.remove('BSPKey')
+        new_header.remove('PrintPost')
+        new_header.remove('Barcode')
+        new_header.remove('DPID')
+        new_header.remove('Error')
 
-        query = 'SELECT BSPKey, PrintPost, Barcode, {0}, DPID, Error, {1}, {2} INTO MailMerge from MailMerge1'
+        dtool_fields = [x for x in new_header if x.startswith('Dt ')]
+        balance_fields = [x for x in new_header if not x.startswith('Dt ')]
 
-        cursor.execute(query.format(','.join(balance_fields), ','.join(blink_fields), ','.join(dtool_fields)))
+        query = 'CREATE TABLE MailMerge AS SELECT BSPKey, PrintPost, Barcode, "{0}", DPID, Error, "{1}", "{2}" from MailMerge1'
 
+        query = query.format('","'.join(balance_fields), '","'.join(blink_fields), '","'.join(dtool_fields))
+        print query
+        cursor.execute(query)
         cursor.execute('drop table MailMerge1')
 
         conn.commit()
@@ -269,7 +271,7 @@ if __name__ == '__main__':
     startTime = datetime.datetime.now()
     con = db.get_connection()
     #347
-    app = DPID(359, con)  # 474, 1360, <--------- please change taskid number here 474 Hertz, 1360 Holden, what is your taskid number?
+    app = DPID(474, con)  # 474, 1360, <--------- please change taskid number here 474 Hertz, 1360 Holden, what is your taskid number?
     app.run()
     con.commit()
     log.info(datetime.datetime.now() - startTime)

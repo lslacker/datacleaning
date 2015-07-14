@@ -177,6 +177,7 @@ class DPID(object):
         conn = sqlite3.connect(access_filename)
         cursor = conn.cursor()
         cursor.execute('BEGIN')
+        cursor.execute('DROP TABLE IF EXISTS MailMerge')
         cursor.execute('DROP TABLE IF EXISTS MailMerge1')
 
         with open(output, 'r') as f:
@@ -196,6 +197,7 @@ class DPID(object):
             insertQuery = insertQuery[:-1]+')'
 
             for row in reader:
+                row = map(lambda x: x.decode('utf-8'), row)
                 cursor.execute(insertQuery, row)
 
         # cursor.execute('''
@@ -271,7 +273,7 @@ if __name__ == '__main__':
     startTime = datetime.datetime.now()
     con = db.get_connection()
     #347
-    app = DPID(474, con)  # 474, 1360, <--------- please change taskid number here 474 Hertz, 1360 Holden, what is your taskid number?
+    app = DPID(1360, con)  # 474, 1360, <--------- please change taskid number here 474 Hertz, 1360 Holden, what is your taskid number?
     app.run()
     con.commit()
     log.info(datetime.datetime.now() - startTime)
